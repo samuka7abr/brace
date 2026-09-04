@@ -1,15 +1,8 @@
-# brace <img src="https://raw.githubusercontent.com/TheZoq2/ferris/master/rustacean-flat-happy.svg" height="40"/>
+# brace 
 
 **Parser de JSON (RFC 8259) escrito do zero, sem `serde_json`, `nom` ou `pest`.** Todo erro de sintaxe volta com a linha e a coluna exatas de onde a entrada quebrou.
 
----
-
-### Tech Stack
-
-**Language**
-<p>
-  <img src="https://skillicons.dev/icons?i=rust" height="36"/>
-</p>
+<img src="https://raw.githubusercontent.com/TheZoq2/ferris/master/rustacean-flat-happy.svg" height="60"/>
 
 ---
 
