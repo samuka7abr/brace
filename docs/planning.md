@@ -4,9 +4,9 @@ Roteiro de implementação do parser JSON descrito em `docs/project.md`. Este do
 
 ## Estado (2026-09-04)
 
-O plano abaixo foi executado por completo: `src/lib.rs`, `src/value.rs`, `src/error.rs`, `src/lexer.rs`, `src/parser.rs`, `tests/valid.rs` e `tests/invalid.rs` existem e implementam as 7 fases da seção 4. `cargo build` e `cargo clippy --all-targets` passam sem warnings. 113 testes passam: 54 unitários (dentro de `src/`), 35 em `tests/invalid.rs`, 23 em `tests/valid.rs`, mais 1 doctest.
+O plano abaixo foi executado por completo, incluindo a JSONTestSuite: `src/lib.rs`, `src/value.rs`, `src/error.rs`, `src/lexer.rs`, `src/parser.rs`, `tests/valid.rs`, `tests/invalid.rs` e `tests/conformance.rs` existem e implementam as 7 fases da seção 4. `cargo build` e `cargo clippy --all-targets` passam sem warnings. 117 testes passam: 54 unitários (dentro de `src/`), 4 de conformidade em `tests/conformance.rs`, 35 em `tests/invalid.rs`, 23 em `tests/valid.rs`, mais 1 doctest.
 
-As seções 1 a 8 abaixo continuam sendo o registro técnico válido do raciocínio que guiou a implementação — não foram apagadas. A seção "Questões em aberto" no final foi reescrita: os cinco pontos que estavam abertos foram decididos durante a implementação; o que restou pendente de verdade é só a JSONTestSuite (seção 6), que não foi vendorizada nem integrada.
+As seções 1 a 8 abaixo continuam sendo o registro técnico válido do raciocínio que guiou a implementação — não foram apagadas. A seção "Questões em aberto" no final foi reescrita: os cinco pontos que estavam abertos foram decididos durante a implementação, e a JSONTestSuite (seção 6), antes o único ponto realmente pendente, foi vendorizada e integrada — deixou de ser pendência.
 
 ## 1. Objetivo e critério de pronto
 
@@ -16,7 +16,7 @@ O projeto está pronto quando todos os itens abaixo forem verdadeiros:
 - Todo JSON sintaticamente válido segundo RFC 8259 produz `Ok(Value)` com a árvore correta.
 - Toda entrada inválida produz `Err(ParseError)` com `line`/`col` apontando para o caractere ou token onde o problema foi detectado — não uma posição aproximada ou fixa em `(0, 0)`.
 - Os módulos `lexer` e `parser` (e qualquer tipo interno de token/posição) são privados ao crate; só `parse`, `Value`, `ParseError` e `ParseErrorKind` são `pub`.
-- Existe suíte de testes unitários por módulo, testes de integração via API pública em `tests/`, e pelo menos um subconjunto do JSONTestSuite rodando como referência de conformidade (ver seção 6).
+- Existe suíte de testes unitários por módulo, testes de integração via API pública em `tests/`, e pelo menos um subconjunto do JSONTestSuite rodando como referência de conformidade (ver seção 6). **Satisfeito**: a suíte inteira (não só um subconjunto) foi vendorizada e roda em `tests/conformance.rs` — ver seção 6 para o resultado.
 - As limitações assumidas pela spec (precisão de `f64`, `1` vs `1.0`, lookup O(n) em `Object`) estão documentadas no código (doc comments em `Value`/`parse`), não só nesta doc de planejamento.
 - `cargo build`, `cargo test` e `cargo clippy` passam sem warnings não justificados.
 
@@ -169,7 +169,11 @@ Um helper de teste que recebe `(input, expected_line, expected_col, expected_kin
 - `n_*`: devem ser rejeitados (`parse` retorna `Err`).
 - `i_*`: comportamento implementation-defined (números fora de alcance, substitutos soltos, aninhamento extremo) — não há resposta "certa" única; o único requisito razoável é não entrar em pânico nem estourar pilha.
 
-Sugestão de harness: um teste de integração que itera um diretório de fixtures vendorizado (subconjunto escolhido, não necessariamente a suíte inteira — ela tem centenas de arquivos) e aplica a regra acima por prefixo do nome do arquivo. Vendorizar via cópia direta de uma seleção de arquivos é mais simples de manter do que submódulo git para um projeto deste tamanho; decisão de como trazer os arquivos para o repo fica para quando essa fase começar.
+**Feito.** A suíte inteira (não um subconjunto) foi vendorizada por cópia direta em `tests/fixtures/JSONTestSuite/test_parsing/` — 318 arquivos (95 `y_`, 188 `n_`, 35 `i_`), com a `LICENSE` MIT original e um `PROVENANCE.md` documentando origem e convenção de nomes. O harness é `tests/conformance.rs`, com 4 testes: `y_devem_ser_aceitos`, `n_devem_ser_rejeitados`, `i_nao_podem_quebrar` e `suite_esta_presente_e_completa` (confere as contagens, para a suíte não passar vacuamente se as fixtures sumirem).
+
+Resultado: 95/95 `y_` aceitos, 188/188 `n_` rejeitados, 35 `i_` sem quebrar — zero crashes e zero timeouts nos 318 arquivos. Nuance registrada com honestidade: 12 dos 188 `n_` não são rejeitados pelo parser — contêm UTF-8 inválido e são barrados na conversão para `String`, antes de `brace::parse` ser chamado; o veredito final está correto, mas o mérito é do tipo `&str` do Rust (UTF-8 válido por construção), não da lógica de parsing. Os outros 176 `n_` são rejeitados por sintaxe de verdade. O harness distingue os dois casos com um enum `Veredito` de três estados.
+
+Não feito: o diretório `test_transform/` da suíte (transformação de valores ambíguos — número fora de alcance, chave duplicada) não foi copiado nem testado. É um eixo diferente de aceitar/rejeitar, e fica de fora do que este harness cobre.
 
 ## 7. Riscos e armadilhas conhecidas
 
@@ -206,4 +210,4 @@ Dos cinco pontos que este plano deixava em aberto, todos os cinco foram decidido
 
 Um ponto adicional, não listado nas cinco questões originais, também foi resolvido durante a implementação: `UnexpectedToken.found` é `&'static str`, não `Token` como o `project.md` define literalmente — motivo técnico, não preferência. `Token`/`TokenKind` são `pub(crate)` (privados ao crate, ver questão 1 e a decisão de fronteira pub/privado) e `ParseErrorKind` é público; um tipo privado não pode aparecer num campo de um tipo público em Rust. O `&'static str` carrega a descrição do token, produzida por `TokenKind::describe()`. É, junto com a questão 3, o desvio mais literal da spec escrita entre as decisões tomadas.
 
-O que continua pendente de verdade: a JSONTestSuite (seção 6) não foi vendorizada nem integrada ao repositório. Não há harness, não há fixtures, não há teste de conformidade correspondente — isso é trabalho futuro, não uma decisão tomada.
+A JSONTestSuite (seção 6), que era o único ponto pendente de verdade, foi vendorizada e integrada: harness em `tests/conformance.rs`, fixtures em `tests/fixtures/JSONTestSuite/test_parsing/`, 95/95 `y_` aceitos, 188/188 `n_` rejeitados, 35 `i_` sem quebrar. O que continua pendente é só `test_transform/` (transformação de valores ambíguos), fora do escopo desse harness — ver seção 6.
