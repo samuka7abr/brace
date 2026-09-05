@@ -80,7 +80,7 @@ O parser segue o RFC 8259 de forma estrita, o que em alguns pontos é mais restr
 - Combina pares substitutos UTF-16 corretamente: `"😀"` vira `"😀"`. Um substituto solto ou incompleto é `InvalidUnicodeEscape`, nunca cai silenciosamente em `U+FFFD`.
 - Impõe limite de profundidade de aninhamento de 128 níveis. Um documento com 100.000 colchetes abertos em sequência retorna `DepthLimitExceeded` em vez de estourar a pilha de chamadas.
 
-A JSONTestSuite ([nst/JSONTestSuite](https://github.com/nst/JSONTestSuite)) ainda **não** foi vendorizada nem integrada ao repositório. É o item de conformidade que falta — não há harness, não há fixtures, não há teste correspondente.
+A JSONTestSuite ([nst/JSONTestSuite](https://github.com/nst/JSONTestSuite)) foi vendorizada e roda em `cargo test`. As fixtures estão em `tests/fixtures/JSONTestSuite/test_parsing/` (318 arquivos: 95 `y_`, 188 `n_`, 35 `i_`, com a `LICENSE` MIT original e um `PROVENANCE.md` descrevendo origem e convenção de nomes), e o harness é `tests/conformance.rs`. Resultado: 95/95 `y_` aceitos, 188/188 `n_` rejeitados, 35 `i_` sem quebrar — zero crashes e zero timeouts nos 318 arquivos. Nuance: 12 dos 188 `n_` não são rejeitados pela lógica de parsing em si — contêm UTF-8 inválido e são barrados na conversão para `String`, antes de `brace::parse` ser chamado; o veredito final está correto, mas o mérito é do tipo `&str` do Rust, não do parser. Os outros 176 `n_` são rejeitados por sintaxe de verdade; o harness distingue os dois casos com um enum `Veredito` de três estados.
 
 ## Limitações conhecidas
 
@@ -89,6 +89,7 @@ A JSONTestSuite ([nst/JSONTestSuite](https://github.com/nst/JSONTestSuite)) aind
 - **`Object` é `Vec<(String, Value)>`.** Preserva a ordem de inserção das chaves, mas lookup é O(n) em vez de O(1). Chaves duplicadas (`{"a":1,"a":2}`) são mantidas as duas, sem dedup — RFC 8259 deixa esse caso como não especificado, e essa é a escolha deliberada do projeto.
 - **O limite de 128 níveis de aninhamento rejeita JSON válido, porém muito profundo.** É uma escolha consciente para não estourar a pilha real, explicitamente permitida pelo RFC 8259 (que autoriza limites de implementação), não uma consequência acidental.
 - **Fora de escopo**: JSON5/JSONC (comentários, trailing comma, chave sem aspas), parsing incremental/streaming, serialização (`Value` → string), precisão arbitrária em números.
+- **`test_transform/` da JSONTestSuite não é coberto.** Esse diretório da suíte testa como transformar valores ambíguos (número fora de alcance, chave duplicada), um eixo diferente do que `test_parsing/` cobre (aceitar/rejeitar). Não vendorizado, não testado.
 
 ## Qualidade
 
@@ -98,7 +99,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Estado atual: 113 testes passando — 54 unitários (dentro de `src/`), 35 em `tests/invalid.rs`, 23 em `tests/valid.rs`, mais 1 doctest. Clippy sem warnings.
+Estado atual: 117 testes passando — 54 unitários (dentro de `src/`), 4 de conformidade em `tests/conformance.rs`, 35 em `tests/invalid.rs`, 23 em `tests/valid.rs`, mais 1 doctest. Clippy sem warnings.
 
 ## Estrutura do projeto
 
@@ -112,8 +113,10 @@ Estado atual: 113 testes passando — 54 unitários (dentro de `src/`), 35 em `t
 │   ├── parser.rs   # Parser recursivo descendente (privado ao crate)
 │   └── main.rs     # binário fino de demonstração (arquivo ou stdin)
 ├── tests/
-│   ├── valid.rs    # integração via API pública: entradas que devem parsear
-│   └── invalid.rs  # integração via API pública: entradas que devem falhar, com posição
+│   ├── valid.rs         # integração via API pública: entradas que devem parsear
+│   ├── invalid.rs       # integração via API pública: entradas que devem falhar, com posição
+│   ├── conformance.rs   # harness da JSONTestSuite vendorizada: y_/n_/i_ por prefixo
+│   └── fixtures/        # JSONTestSuite vendorizada (test_parsing/, LICENSE, PROVENANCE.md)
 └── docs/
     ├── project.md    # spec: gramática, estruturas de dados, escopo
     └── planning.md   # roteiro de implementação, decisões técnicas e estado
